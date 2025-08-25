@@ -317,13 +317,20 @@ class TestChatService(unittest.IsolatedAsyncioTestCase):
 
       # Fake events that handler.stream_events() will yield
       async def fake_events():
-          yield HtmlEvent(html="<p>foo</p>")  # yields the correct type that _handle_event knows
-          yield HtmlEvent(html="<p>bar</p>")
+        yield MagicMock(data="foo")
+        yield MagicMock(data="bar")
 
       mock_handler.stream_events.side_effect = fake_events
       mock_handler.result.return_value = None
       mock_workflow.run.return_value = mock_handler
       mock_get_agent_workflow.return_value = mock_workflow
+
+
+      self.chat_svc._handle_event = AsyncMock(
+        side_effect=lambda event, resp_ctx, handler: [
+            SSEChunk(data=f"<p>{event.data}</p>", event="html")
+        ]
+      )
 
       # --- Mock services used inside chat() ---
       self.auth_svc.get_user_details.return_value = (user_id, tenant_id)
@@ -855,4 +862,5 @@ class TestTitleGenerator(unittest.IsolatedAsyncioTestCase):
     actual = await self.title_generator.generate_title(question=question, is_question_safe=False)
     self.assertEqual(expected, actual)
     self.llm.acomplete.assert_not_awaited()
+
 
