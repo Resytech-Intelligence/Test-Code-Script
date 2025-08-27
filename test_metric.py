@@ -5,6 +5,10 @@ async def test_metric_anomaly_helper_anomaly(self, mock_get_agent_workflow):
     """
     user_context = Mock(spec=UserContext)
 
+    spec = mock_reports_spec.return_value
+    spec.get_metric_models = AsyncMock()
+    spec._metric_anomaly_helper = AsyncMock(return_value="mocked_response")
+
     # --- Mock ReportsToolSpec ---
     with patch("genai_chat.tools._reports.ReportsToolSpec", autospec=True) as mock_reports_spec:
         spec = mock_reports_spec.return_value
