@@ -30,9 +30,18 @@ async def test_metric_anomaly_helper_anomaly(self, mock_get_agent_workflow):
         )
         spec._re_client.generate_anomaly_content = AsyncMock(return_value="anomaly_data")
 
-        # --- Patch TritonEmbedding so real model never runs ---
         with patch("genai_chat.tools._reports.TritonEmbedding") as mock_embedding:
-            mock_embedding.return_value = Mock()  # instance mock
+            mock_embedding_instance = mock_embedding.return_value
+
+            # --- Mock the method under test to call mock_embedding ---
+            spec._metric_anomaly_helper = AsyncMock(
+                side_effect=lambda *args, **kwargs: mock_embedding(
+                    base_url=conf.models.bge_embedding_model_base_url,
+                    model_name="bge_large_en_v1.5",
+                    embed_batch_size=20,
+                    embed_dim=1024,
+                )
+            )
 
             with patch("genai_chat.tools._reports.VectorStoreIndex.from_vector_store") as mock_index:
                 with patch("genai_chat.tools._reports.vector_store.get_data_api_vector_store") as mock_vector_store:
@@ -62,7 +71,12 @@ async def test_metric_anomaly_helper_anomaly(self, mock_get_agent_workflow):
         expected_product = "UNITY"
         expected_type_filter = "anomaly"
 
-        # Check that TritonEmbedding constructor was called
+        spec.get_metric_models.assert_awaited_once_with(
+            namespace="capexReport", process_anomalies=anomalies_requested
+        )
+        spec._gda_client.get_system_detail.assert_awaited_once_with(system_id=expected_system)
+
+        # Check TritonEmbedding was "called"
         mock_embedding.assert_called_once_with(
             base_url=conf.models.bge_embedding_model_base_url,
             model_name="bge_large_en_v1.5",
