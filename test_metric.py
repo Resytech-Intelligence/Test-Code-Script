@@ -1,5 +1,8 @@
 @patch("genai_chat.chat_service.get_agent_workflow")
-async def test_metric_anomaly_helper_anomaly(mock_get_agent_workflow):
+async def test_metric_anomaly_helper_anomaly(self, mock_get_agent_workflow):
+    """
+    Test _metric_anomaly_helper when anomalies_requested=True
+    """
     user_context = Mock(spec=UserContext)
     spec = ReportsToolSpec(user_context=user_context)
     object_id = ObjectId("APM00193712772_FILESYSTEM_fs_95")
@@ -7,6 +10,7 @@ async def test_metric_anomaly_helper_anomaly(mock_get_agent_workflow):
     time = GraphTimeEnum.ONE_DAY
     anomalies_requested = True
 
+    # --- Mock dependencies ---
     spec.get_metric_models = AsyncMock()
     spec._gda_client.get_system_detail = AsyncMock(
         return_value=SystemDetail.from_dict(
@@ -28,10 +32,12 @@ async def test_metric_anomaly_helper_anomaly(mock_get_agent_workflow):
                 with patch("genai_chat.tools._reports.MetadataFilters") as mock_filters:
                     with patch("genai_chat.tools._reports.ToolLayoutResponse") as mock_tlr:
 
+                        # --- Configure vector store ---
                         mock_vector_store.return_value = MockVectorStore()
                         vector_store_mock = mock_vector_store.return_value
                         index = mock_index.return_value
 
+                        # Simulate retriever + doc
                         mock_doc = Mock()
                         mock_doc.id_ = "resource__column"
                         mock_doc.metadata = {"identifier": "resource__column"}
@@ -39,10 +45,12 @@ async def test_metric_anomaly_helper_anomaly(mock_get_agent_workflow):
                         retriever = index.as_retriever.return_value
                         retriever.aretrieve = AsyncMock(return_value=[mock_doc])
 
+                        # --- Call function under test ---
                         response = await spec._metric_anomaly_helper(
                             object_id, metrics, time, anomalies_requested
                         )
 
+    # --- Assertions ---
     expected_system, _ = get_system_and_object_type(object_id)
     expected_product = "UNITY"
     expected_type_filter = "anomaly"
@@ -94,4 +102,4 @@ async def test_metric_anomaly_helper_anomaly(mock_get_agent_workflow):
 
     le = LayoutEnum.ANOMALY_CHART
     mock_tlr.assert_called_once_with(layout=le, data="anomaly_data")
-    assert response == ChatLayoutResponse(responses=[mock_tlr.return_value])
+    self.assertEqual(response, ChatLayoutResponse(responses=[mock_tlr.return_value]))
