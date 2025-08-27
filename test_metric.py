@@ -1,18 +1,12 @@
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
-from bson import ObjectId
-
-@pytest.mark.asyncio
 @patch("genai_chat.chat_service.get_agent_workflow")
-async def test_metric_anomaly_helper(mock_get_agent_workflow):
+async def test_metric_anomaly_helper_anomaly(mock_get_agent_workflow):
     user_context = Mock(spec=UserContext)
     spec = ReportsToolSpec(user_context=user_context)
     object_id = ObjectId("APM00193712772_FILESYSTEM_fs_95")
     metrics = ["metric1"]
     time = GraphTimeEnum.ONE_DAY
-    anomalies_requested = False
+    anomalies_requested = True
 
-    # --- Mock dependencies ---
     spec.get_metric_models = AsyncMock()
     spec._gda_client.get_system_detail = AsyncMock(
         return_value=SystemDetail.from_dict(
@@ -26,7 +20,7 @@ async def test_metric_anomaly_helper(mock_get_agent_workflow):
             }
         )
     )
-    spec._re_client.generate_metric_content = AsyncMock(return_value="metric_data")
+    spec._re_client.generate_anomaly_content = AsyncMock(return_value="anomaly_data")
 
     with patch("genai_chat.tools._reports.TritonEmbedding", new_callable=Mock) as mock_embedding:
         with patch("genai_chat.tools._reports.VectorStoreIndex.from_vector_store") as mock_index:
@@ -34,12 +28,10 @@ async def test_metric_anomaly_helper(mock_get_agent_workflow):
                 with patch("genai_chat.tools._reports.MetadataFilters") as mock_filters:
                     with patch("genai_chat.tools._reports.ToolLayoutResponse") as mock_tlr:
 
-                        # --- Configure vector store ---
                         mock_vector_store.return_value = MockVectorStore()
                         vector_store_mock = mock_vector_store.return_value
                         index = mock_index.return_value
 
-                        # Simulate retriever
                         mock_doc = Mock()
                         mock_doc.id_ = "resource__column"
                         mock_doc.metadata = {"identifier": "resource__column"}
@@ -47,15 +39,13 @@ async def test_metric_anomaly_helper(mock_get_agent_workflow):
                         retriever = index.as_retriever.return_value
                         retriever.aretrieve = AsyncMock(return_value=[mock_doc])
 
-                        # --- Call function under test ---
                         response = await spec._metric_anomaly_helper(
                             object_id, metrics, time, anomalies_requested
                         )
 
-    # --- Assertions ---
     expected_system, _ = get_system_and_object_type(object_id)
     expected_product = "UNITY"
-    expected_type_filter = "anomaly" if anomalies_requested else "metric"
+    expected_type_filter = "anomaly"
 
     spec.get_metric_models.assert_awaited_once_with(
         namespace="capexReport", process_anomalies=anomalies_requested
@@ -88,7 +78,7 @@ async def test_metric_anomaly_helper(mock_get_agent_workflow):
         text_to_match=f"{expected_product} None metric1"
     )
 
-    spec._re_client.generate_metric_content.assert_awaited_once_with(
+    spec._re_client.generate_anomaly_content.assert_awaited_once_with(
         secure_permissions=user_context.secure_permissions,
         resource="resource",
         resource_name="resource",
@@ -102,6 +92,6 @@ async def test_metric_anomaly_helper(mock_get_agent_workflow):
         time_duration=1,
     )
 
-    le = LayoutEnum.LINE_CHART if not anomalies_requested else LayoutEnum.ANOMALY_CHART
-    mock_tlr.assert_called_once_with(layout=le, data="metric_data")
+    le = LayoutEnum.ANOMALY_CHART
+    mock_tlr.assert_called_once_with(layout=le, data="anomaly_data")
     assert response == ChatLayoutResponse(responses=[mock_tlr.return_value])
